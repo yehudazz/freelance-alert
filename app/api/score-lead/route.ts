@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { headers } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -119,24 +119,21 @@ Scoring criteria:
 
 Respond with ONLY the raw JSON object — no markdown, no code fences, no explanation.`
 
-  // Call Claude API
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  // Call AI via OpenRouter
+  const client = new OpenAI({
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: process.env.OPENROUTER_API_KEY || 'placeholder',
+  })
 
   let scoreResult: ScoreResult
   try {
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+    const message = await client.chat.completions.create({
+      model: 'anthropic/claude-haiku-4-5',
       max_tokens: 512,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
+      messages: [{ role: 'user', content: prompt }],
     })
 
-    const rawText =
-      message.content[0].type === 'text' ? message.content[0].text : ''
+    const rawText = message.choices[0]?.message?.content ?? ''
 
     scoreResult = JSON.parse(rawText) as ScoreResult
 

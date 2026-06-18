@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
 import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const openai = new OpenAI({
+    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: process.env.OPENROUTER_API_KEY || 'placeholder',
+  })
   // Rate limit: 30 per minute per IP
   const ip =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
@@ -82,11 +85,11 @@ export async function POST(request: NextRequest) {
 
   const { service_description, skills, bio } = profile
 
-  // Call Anthropic Claude API
+  // Call AI via OpenRouter
   let draftedMessage: string
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await openai.chat.completions.create({
+      model: 'anthropic/claude-haiku-4-5',
       max_tokens: 300,
       messages: [
         {
@@ -108,11 +111,10 @@ Requirements:
       ],
     })
 
-    const content = response.content[0]
-    if (content.type !== 'text') {
-      throw new Error('Unexpected response type from Claude')
+    draftedMessage = response.choices[0]?.message?.content ?? ''
+    if (!draftedMessage) {
+      throw new Error('Empty response from AI')
     }
-    draftedMessage = content.text
   } catch (err) {
     console.error('Anthropic API error:', err)
     return NextResponse.json(
