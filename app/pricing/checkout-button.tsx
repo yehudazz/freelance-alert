@@ -1,15 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface CheckoutButtonProps {
-  priceId: string
+  plan: 'starter' | 'pro'
   label: string
   variant: 'primary' | 'outline'
 }
 
-export function CheckoutButton({ priceId, label, variant }: CheckoutButtonProps) {
+export function CheckoutButton({ plan, label, variant }: CheckoutButtonProps) {
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleClick = async () => {
     setLoading(true)
@@ -17,12 +19,16 @@ export function CheckoutButton({ priceId, label, variant }: CheckoutButtonProps)
       const res = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify({ plan }),
       })
 
+      if (res.status === 401) {
+        router.push('/login?redirect=/pricing')
+        return
+      }
+
       if (!res.ok) {
-        const { error } = await res.json().catch(() => ({ error: 'Unknown error' }))
-        console.error('Checkout error:', error)
+        console.error('Checkout error:', await res.text())
         setLoading(false)
         return
       }
@@ -54,7 +60,7 @@ export function CheckoutButton({ priceId, label, variant }: CheckoutButtonProps)
       disabled={loading}
       className={`${baseClasses} ${variantClasses}`}
     >
-      {loading ? 'Redirecting...' : label}
+      {loading ? 'Redirecting to Stripe...' : label}
     </button>
   )
 }

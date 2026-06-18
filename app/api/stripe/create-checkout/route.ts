@@ -6,10 +6,10 @@ import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-  const VALID_PRICE_IDS = new Set([
-    process.env.STRIPE_STARTER_PRICE_ID,
-    process.env.STRIPE_PRO_PRICE_ID,
-  ])
+  const PLAN_TO_PRICE: Record<string, string | undefined> = {
+    starter: process.env.STRIPE_STARTER_PRICE_ID,
+    pro: process.env.STRIPE_PRO_PRICE_ID,
+  }
   const supabase = await createClient()
   const { data: { session } } = await supabase.auth.getSession()
 
@@ -22,17 +22,18 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Too many requests' }, { status: 429 })
   }
 
-  let body: { priceId?: string }
+  let body: { plan?: string }
   try {
     body = await request.json()
   } catch {
     return Response.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { priceId } = body
+  const { plan } = body
+  const priceId = plan ? PLAN_TO_PRICE[plan] : undefined
 
-  if (!priceId || !VALID_PRICE_IDS.has(priceId)) {
-    return Response.json({ error: 'Invalid price ID' }, { status: 400 })
+  if (!priceId) {
+    return Response.json({ error: 'Invalid plan' }, { status: 400 })
   }
 
   const adminClient = createAdminClient()

@@ -56,7 +56,7 @@ const plans = [
     ],
     cta: {
       label: 'Start Free Trial',
-      priceId: 'starter',
+      plan: 'starter' as const,
       variant: 'primary' as const,
     },
   },
@@ -77,7 +77,7 @@ const plans = [
     ],
     cta: {
       label: 'Go Pro',
-      priceId: 'pro',
+      plan: 'pro' as const,
       variant: 'outline' as const,
     },
   },
@@ -204,7 +204,7 @@ export default function PricingPage() {
                     </Link>
                   ) : (
                     <CheckoutButton
-                      priceId={plan.cta.priceId!}
+                      plan={plan.cta.plan!}
                       label={plan.cta.label}
                       variant={plan.cta.variant}
                     />

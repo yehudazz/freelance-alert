@@ -360,7 +360,7 @@ export default function Home() {
                   <li key={f} className="check-item" style={{ color: "#bbf7d0" }}><span className="check">✓</span>{f}</li>
                 ))}
               </ul>
-              <Link href="/signup" className="btn-primary" style={{ textAlign: "center", justifyContent: "center" }}>
+              <Link href="/pricing" className="btn-primary" style={{ textAlign: "center", justifyContent: "center" }}>
                 Start free trial →
               </Link>
             </div>
@@ -381,7 +381,7 @@ export default function Home() {
                   <li key={f} className="check-item"><span className="check">✓</span>{f}</li>
                 ))}
               </ul>
-              <Link href="/signup" style={{ display: "block", textAlign: "center", border: "1px solid #22c55e", color: "#22c55e", padding: ".75rem", borderRadius: ".625rem", fontWeight: 700, textDecoration: "none", fontSize: ".9rem", transition: "all .2s" }}>
+              <Link href="/pricing" style={{ display: "block", textAlign: "center", border: "1px solid #22c55e", color: "#22c55e", padding: ".75rem", borderRadius: ".625rem", fontWeight: 700, textDecoration: "none", fontSize: ".9rem", transition: "all .2s" }}>
                 Go Pro
               </Link>
             </div>
