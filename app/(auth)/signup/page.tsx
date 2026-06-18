@@ -78,8 +78,10 @@ export default function SignupPage() {
     if (oauthError) {
       setError(oauthError.message)
       setGoogleLoading(false)
+    } else {
+      // If redirect doesn't happen within 5s, reset loading state
+      setTimeout(() => setGoogleLoading(false), 5000)
     }
-    // On success the browser is redirected, no need to set loading false
   }
 
   return (

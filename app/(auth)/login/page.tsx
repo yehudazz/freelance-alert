@@ -54,6 +54,8 @@ export default function LoginPage() {
     if (oauthError) {
       setError(oauthError.message);
       setGoogleLoading(false);
+    } else {
+      setTimeout(() => setGoogleLoading(false), 5000)
     }
   };
 
