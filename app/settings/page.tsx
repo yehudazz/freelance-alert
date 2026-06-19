@@ -627,46 +627,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ------------------------------------------------------------------ */}
-        {/* 4. DANGER ZONE                                                      */}
-        {/* ------------------------------------------------------------------ */}
-        <Card className="bg-red-950/20 border-red-800/40 ring-0">
-          <CardHeader className="pb-0">
-            <CardTitle className="text-red-400 text-base font-semibold">Danger Zone</CardTitle>
-            <CardDescription className="text-slate-400 text-sm">
-              Irreversible actions â€” proceed with caution
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="flex items-start justify-between gap-4 rounded-lg border border-red-800/30 bg-red-950/30 p-4">
-              <div>
-                <p className="text-red-300 text-sm font-medium">Delete account</p>
-                <p className="text-slate-500 text-xs mt-1">
-                  Permanently delete your account, profile, and all associated data. This cannot be undone.
-                </p>
-              </div>
-              <Button
-                variant="destructive"
-                onClick={() => setDeleteDialogOpen(true)}
-                disabled={deleting}
-                className="shrink-0 bg-red-600 hover:bg-red-700 text-white border-0"
-              >
-                {deleting ? 'Deleting...' : 'Delete Account'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* Delete confirmation dialog */}
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        title="Delete your account?"
-        description="This will permanently delete your account, profile, leads, and all settings. This action cannot be undone."
-        confirmLabel={deleting ? 'Deleting...' : 'Yes, delete my account'}
-        onConfirm={deleteAccount}
-        onCancel={() => setDeleteDialogOpen(false)}
-      />
     </div>
     </AppShell>
   )
