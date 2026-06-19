@@ -5,7 +5,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return Response.json({ error: 'Stripe not configured', redirect: '/pricing' }, { status: 503 })
+  }
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
   const PLAN_TO_PRICE: Record<string, string | undefined> = {
     starter: process.env.STRIPE_STARTER_PRICE_ID,
     pro: process.env.STRIPE_PRO_PRICE_ID,

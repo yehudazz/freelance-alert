@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, KeyboardEvent } from 'react'
+import Link from 'next/link'
 import { AppShell } from '@/components/app-shell'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -276,15 +277,10 @@ export default function SettingsPage() {
   async function startCheckout(plan: 'starter' | 'pro') {
     setCheckoutLoading(plan)
     try {
-      const priceId =
-        plan === 'starter'
-          ? process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID
-          : process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID
-
       const res = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify({ plan }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -607,20 +603,12 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <p className="text-slate-400 text-sm">Upgrade to unlock more leads and features.</p>
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    onClick={() => startCheckout('starter')}
-                    disabled={checkoutLoading !== null}
-                    className="bg-blue-600 hover:bg-blue-700 text-white border-0 flex-1"
-                  >
-                    {checkoutLoading === 'starter' ? 'Redirecting...' : 'Upgrade to Starter'}
-                  </Button>
-                  <Button
-                    onClick={() => startCheckout('pro')}
-                    disabled={checkoutLoading !== null}
-                    className="bg-green-500 hover:bg-green-600 text-white border-0 flex-1"
-                  >
-                    {checkoutLoading === 'pro' ? 'Redirecting...' : 'Upgrade to Pro'}
-                  </Button>
+                  <Link href="/pricing" className="flex-1 inline-flex items-center justify-center rounded-md bg-green-500 hover:bg-green-600 text-white font-semibold px-4 h-10 text-sm transition-colors">
+                    Upgrade to Starter
+                  </Link>
+                  <Link href="/pricing" className="flex-1 inline-flex items-center justify-center rounded-md border border-slate-600 text-slate-200 hover:bg-slate-700 font-semibold px-4 h-10 text-sm transition-colors">
+                    View all plans
+                  </Link>
                 </div>
               </div>
             )}

@@ -27,15 +27,17 @@ export function CheckoutButton({ plan, label, variant }: CheckoutButtonProps) {
         return
       }
 
+      const data = await res.json()
+
       if (!res.ok) {
-        console.error('Checkout error:', await res.text())
+        if (data.redirect) { router.push(data.redirect); return }
+        console.error('Checkout error:', data.error)
         setLoading(false)
         return
       }
 
-      const { url } = await res.json()
-      if (url) {
-        window.location.href = url
+      if (data.url) {
+        window.location.href = data.url
       } else {
         setLoading(false)
       }
