@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, KeyboardEvent } from 'react'
+import { AppShell } from '@/components/app-shell'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -349,7 +350,8 @@ export default function KeywordsPage() {
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <div className="min-h-screen bg-[#0f172a] px-4 py-10">
+    <AppShell>
+    <div className="px-4 py-10">
       <div className="mx-auto max-w-2xl space-y-10">
 
         {/* Page header */}
@@ -557,5 +559,6 @@ export default function KeywordsPage() {
         )}
       </div>
     </div>
+    </AppShell>
   )
 }

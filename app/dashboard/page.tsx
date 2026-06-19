@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { Lead, Profile } from '@/types/database'
+import { AppShell } from '@/components/app-shell'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -123,19 +124,7 @@ export default async function DashboardPage() {
     (totalLeadCount ?? 0) >= 5
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-white">
-      {/* Top nav */}
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <span className="text-green-500 font-semibold tracking-wide text-sm uppercase">
-          FreelanceAlert
-        </span>
-        <nav className="flex items-center gap-4 text-sm text-slate-400">
-          <Link href="/settings" className="hover:text-white transition-colors">
-            Settings
-          </Link>
-        </nav>
-      </header>
-
+    <AppShell>
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
         {/* Upgrade banner */}
         {isFreeTierFull && (
@@ -276,6 +265,6 @@ export default async function DashboardPage() {
           )}
         </div>
       </main>
-    </div>
+    </AppShell>
   )
 }

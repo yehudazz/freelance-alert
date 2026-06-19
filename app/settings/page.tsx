@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, KeyboardEvent } from 'react'
+import { AppShell } from '@/components/app-shell'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -339,7 +340,8 @@ export default function SettingsPage() {
     })
 
   return (
-    <div className="min-h-screen bg-[#0f172a] py-10 px-4">
+    <AppShell>
+    <div className="py-10 px-4">
       <div className="mx-auto max-w-2xl space-y-8">
         {/* Page heading */}
         <div>
@@ -666,5 +668,6 @@ export default function SettingsPage() {
         onCancel={() => setDeleteDialogOpen(false)}
       />
     </div>
+    </AppShell>
   )
 }

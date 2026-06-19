@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback } from 'react'
+import { AppShell } from '@/components/app-shell'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { Lead } from '@/types/database'
@@ -258,7 +259,8 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 px-4 py-8 sm:px-6 lg:px-8">
+    <AppShell>
+    <div className="px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
 
         {/* Header */}
@@ -358,5 +360,6 @@ export default function LeadsPage() {
         )}
       </div>
     </div>
+    </AppShell>
   )
 }
