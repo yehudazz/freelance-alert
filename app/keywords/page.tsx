@@ -1,564 +1,266 @@
-﻿'use client'
+'use client'
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, KeyboardEvent } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AppShell } from '@/components/app-shell'
 import { createClient } from '@/lib/supabase/client'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { toast } from 'sonner'
-import type { Keyword, MonitoredSubreddit } from '@/types/database'
-import { Trash2Icon } from 'lucide-react'
 
-// ---------------------------------------------------------------------------
-// Inline toggle switch â€“ no separate Switch UI component in this project
-// ---------------------------------------------------------------------------
-function ToggleSwitch({
-  checked,
-  onChange,
-  disabled,
-  label,
-}: {
-  checked: boolean
-  onChange: () => void
-  disabled?: boolean
-  label: string
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onChange}
-      className={[
-        'relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0f172a]',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-        checked ? 'bg-green-500' : 'bg-slate-600',
-      ].join(' ')}
-    >
-      <span
-        className={[
-          'pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-          checked ? 'translate-x-4' : 'translate-x-0',
-        ].join(' ')}
-      />
-    </button>
-  )
+interface Keyword {
+  id: string
+  keyword: string
+  is_active: boolean
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 export default function KeywordsPage() {
   const supabase = createClient()
-
   const [keywords, setKeywords] = useState<Keyword[]>([])
-  const [subreddits, setSubreddits] = useState<MonitoredSubreddit[]>([])
   const [loading, setLoading] = useState(true)
+  const [description, setDescription] = useState('')
+  const [generating, setGenerating] = useState(false)
+  const [suggested, setSuggested] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // keyword add form
-  const [newKeyword, setNewKeyword] = useState('')
-  const [keywordError, setKeywordError] = useState<string | null>(null)
-  const [addingKeyword, setAddingKeyword] = useState(false)
-
-  // subreddit add form
-  const [newSubreddit, setNewSubreddit] = useState('')
-  const [subredditError, setSubredditError] = useState<string | null>(null)
-  const [addingSubreddit, setAddingSubreddit] = useState(false)
-
-  // toggling / deleting
-  const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [togglingSubId, setTogglingSubId] = useState<string | null>(null)
-  const [deletingSubId, setDeletingSubId] = useState<string | null>(null)
-
-  // ---------------------------------------------------------------------------
-  // Load data
-  // ---------------------------------------------------------------------------
   useEffect(() => {
-    let cancelled = false
-
     async function load() {
-      setLoading(true)
-      const { data: sessionData } = await supabase.auth.getSession()
-      const userId = sessionData.session?.user?.id
-      if (!userId) {
-        setLoading(false)
-        return
-      }
-
-      const [kwRes, srRes] = await Promise.all([
-        supabase
-          .from('keywords')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('monitored_subreddits')
-          .select('*')
-          .eq('user_id', userId)
-          .order('subreddit_name', { ascending: true }),
-      ])
-
-      if (cancelled) return
-
-      if (kwRes.error) {
-        toast.error('Failed to load keywords')
-      } else {
-        setKeywords(kwRes.data ?? [])
-      }
-
-      if (srRes.error) {
-        toast.error('Failed to load subreddits')
-      } else {
-        setSubreddits(srRes.data ?? [])
-      }
-
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      setUserId(user.id)
+      const { data } = await supabase
+        .from('keywords')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      setKeywords(data ?? [])
       setLoading(false)
     }
-
     load()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ---------------------------------------------------------------------------
-  // Keywords â€“ add
-  // ---------------------------------------------------------------------------
-  function validateNewKeyword(value: string): string | null {
-    if (value.trim().length === 0) return 'Keyword cannot be empty.'
-    if (value.trim().length > 100) return 'Keyword must be 100 characters or fewer.'
-    return null
-  }
-
-  async function handleAddKeyword() {
-    const trimmed = newKeyword.trim()
-    const err = validateNewKeyword(trimmed)
-    if (err) {
-      setKeywordError(err)
-      return
-    }
-    setKeywordError(null)
-    setAddingKeyword(true)
-
+  async function handleGenerate() {
+    if (!description.trim()) return
+    setGenerating(true)
+    setSuggested([])
     try {
-      const res = await fetch('/api/keywords', {
+      const res = await fetch('/api/generate-keywords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: trimmed }),
+        body: JSON.stringify({ description }),
       })
-      const json = await res.json()
-
-      if (!res.ok) {
-        toast.error(json.error ?? 'Failed to add keyword')
+      const data = await res.json()
+      if (data.keywords?.length) {
+        setSuggested(data.keywords)
       } else {
-        setKeywords(prev => [json.keyword, ...prev])
-        setNewKeyword('')
-        toast.success(`Keyword "${trimmed}" added`)
+        toast.error('Could not generate keywords, try again')
       }
     } catch {
-      toast.error('Network error â€“ please try again')
+      toast.error('Something went wrong')
     } finally {
-      setAddingKeyword(false)
+      setGenerating(false)
     }
   }
 
-  function handleKeywordKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleAddKeyword()
+  async function saveKeywords() {
+    if (!suggested.length || !userId) return
+    setSaving(true)
+    const rows = suggested.map(kw => ({ user_id: userId, keyword: kw, is_active: true }))
+    const { data, error } = await supabase.from('keywords').insert(rows).select()
+    if (error) {
+      toast.error('Failed to save keywords')
+    } else {
+      setKeywords(prev => [...(data ?? []), ...prev])
+      setSuggested([])
+      setDescription('')
+      toast.success(`${rows.length} search terms saved!`)
     }
+    setSaving(false)
   }
 
-  // ---------------------------------------------------------------------------
-  // Keywords â€“ toggle
-  // ---------------------------------------------------------------------------
-  async function handleToggleKeyword(id: string) {
-    setTogglingId(id)
-    try {
-      const res = await fetch(`/api/keywords/${id}`, { method: 'PATCH' })
-      const json = await res.json()
-
-      if (!res.ok) {
-        toast.error(json.error ?? 'Failed to update keyword')
-      } else {
-        setKeywords(prev =>
-          prev.map(k => (k.id === id ? { ...k, is_active: json.keyword.is_active } : k))
-        )
-        toast.success(json.keyword.is_active ? 'Keyword enabled' : 'Keyword disabled')
-      }
-    } catch {
-      toast.error('Network error â€“ please try again')
-    } finally {
-      setTogglingId(null)
-    }
+  async function deleteKeyword(id: string) {
+    await supabase.from('keywords').delete().eq('id', id)
+    setKeywords(prev => prev.filter(k => k.id !== id))
+    toast.success('Removed')
   }
 
-  // ---------------------------------------------------------------------------
-  // Keywords â€“ delete
-  // ---------------------------------------------------------------------------
-  async function handleDeleteKeyword(id: string, keyword: string) {
-    if (!window.confirm(`Delete keyword "${keyword}"?`)) return
-    setDeletingId(id)
-    try {
-      const res = await fetch(`/api/keywords/${id}`, { method: 'DELETE' })
-
-      if (res.status === 204 || res.ok) {
-        setKeywords(prev => prev.filter(k => k.id !== id))
-        toast.success(`Keyword "${keyword}" deleted`)
-      } else {
-        const json = await res.json().catch(() => ({}))
-        toast.error((json as { error?: string }).error ?? 'Failed to delete keyword')
-      }
-    } catch {
-      toast.error('Network error â€“ please try again')
-    } finally {
-      setDeletingId(null)
-    }
+  async function toggleKeyword(id: string, current: boolean) {
+    await supabase.from('keywords').update({ is_active: !current }).eq('id', id)
+    setKeywords(prev => prev.map(k => k.id === id ? { ...k, is_active: !current } : k))
   }
 
-  // ---------------------------------------------------------------------------
-  // Subreddits â€“ add (direct Supabase insert)
-  // ---------------------------------------------------------------------------
-  function validateSubredditName(value: string): string | null {
-    if (value.trim().length === 0) return 'Subreddit name cannot be empty.'
-    if (!/^[a-zA-Z0-9_]+$/.test(value.trim())) {
-      return 'Subreddit name can only contain letters, numbers, and underscores.'
-    }
-    if (value.trim().length > 21) return 'Subreddit name must be 21 characters or fewer.'
-    return null
+  function removeSuggested(kw: string) {
+    setSuggested(prev => prev.filter(k => k !== kw))
   }
 
-  async function handleAddSubreddit() {
-    const raw = newSubreddit.trim().replace(/^r\//i, '')
-    const err = validateSubredditName(raw)
-    if (err) {
-      setSubredditError(err)
-      return
-    }
-    setSubredditError(null)
-
-    // Check duplicate (client-side)
-    if (subreddits.some(s => s.subreddit_name.toLowerCase() === raw.toLowerCase())) {
-      setSubredditError('This subreddit is already in your list.')
-      return
-    }
-
-    setAddingSubreddit(true)
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const userId = sessionData.session?.user?.id
-      if (!userId) {
-        toast.error('You must be signed in')
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('monitored_subreddits')
-        .insert({ user_id: userId, subreddit_name: raw, is_active: true })
-        .select()
-        .single()
-
-      if (error) {
-        toast.error(error.message ?? 'Failed to add subreddit')
-      } else {
-        setSubreddits(prev =>
-          [...prev, data].sort((a, b) =>
-            a.subreddit_name.localeCompare(b.subreddit_name)
-          )
-        )
-        setNewSubreddit('')
-        toast.success(`r/${raw} added`)
-      }
-    } catch {
-      toast.error('Network error â€“ please try again')
-    } finally {
-      setAddingSubreddit(false)
-    }
-  }
-
-  function handleSubredditKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      handleAddSubreddit()
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Subreddits â€“ toggle (direct Supabase update)
-  // ---------------------------------------------------------------------------
-  async function handleToggleSubreddit(id: string, current: boolean) {
-    setTogglingSubId(id)
-    try {
-      const { data, error } = await supabase
-        .from('monitored_subreddits')
-        .update({ is_active: !current })
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) {
-        toast.error(error.message ?? 'Failed to update subreddit')
-      } else {
-        setSubreddits(prev => prev.map(s => (s.id === id ? { ...s, is_active: data.is_active } : s)))
-        toast.success(data.is_active ? 'Subreddit enabled' : 'Subreddit disabled')
-      }
-    } catch {
-      toast.error('Network error â€“ please try again')
-    } finally {
-      setTogglingSubId(null)
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Subreddits â€“ delete
-  // ---------------------------------------------------------------------------
-  async function handleDeleteSubreddit(id: string, name: string) {
-    if (!window.confirm(`Remove r/${name} from monitoring?`)) return
-    setDeletingSubId(id)
-    try {
-      const { error } = await supabase
-        .from('monitored_subreddits')
-        .delete()
-        .eq('id', id)
-
-      if (error) {
-        toast.error(error.message ?? 'Failed to delete subreddit')
-      } else {
-        setSubreddits(prev => prev.filter(s => s.id !== id))
-        toast.success(`r/${name} removed`)
-      }
-    } catch {
-      toast.error('Network error â€“ please try again')
-    } finally {
-      setDeletingSubId(null)
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Derived counts
-  // ---------------------------------------------------------------------------
-  const activeKeywords = keywords.filter(k => k.is_active).length
-  const activeSubreddits = subreddits.filter(s => s.is_active).length
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
     <AppShell>
-    <div className="px-4 py-10">
-      <div className="mx-auto max-w-2xl space-y-10">
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
-        {/* Page header */}
-        <div>
-          <h1 className="text-2xl font-bold text-white">Keywords &amp; Subreddits</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Manage what FreelanceAlert monitors for new leads.
+        {/* Header */}
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#e2e8f0', marginBottom: '.375rem', letterSpacing: '-.02em' }}>
+            What service do you offer?
+          </h1>
+          <p style={{ color: '#475569', fontSize: '.9rem', lineHeight: 1.6 }}>
+            Describe what you do and our AI will create the perfect search terms to find clients on Hacker News automatically.
           </p>
         </div>
 
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-14 rounded-xl bg-slate-800/60 animate-pulse" />
-            ))}
+        {/* AI Chat Input */}
+        <div style={{ background: 'rgba(15,22,41,.8)', border: '1px solid #1e3a5f', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#22c55e,#0ea5e9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
+              🤖
+            </div>
+            <div style={{ background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.15)', borderRadius: '.75rem', padding: '1rem', flex: 1 }}>
+              <p style={{ margin: 0, color: '#94a3b8', fontSize: '.9rem', lineHeight: 1.6 }}>
+                Hey! Tell me what kind of freelance service you provide and I&apos;ll generate search terms that match what your potential clients post when they&apos;re looking for someone like you.
+              </p>
+            </div>
           </div>
-        ) : (
-          <>
-            {/* ----------------------------------------------------------------
-                KEYWORDS section
-            ---------------------------------------------------------------- */}
-            <Card className="bg-slate-800/50 border-slate-700 text-white">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-white">Keywords</CardTitle>
-                    <CardDescription className="text-slate-400">
-                      Posts containing these phrases will be flagged as leads.
-                    </CardDescription>
-                  </div>
-                  <span className="ml-4 shrink-0 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                    {activeKeywords} active
-                  </span>
-                </div>
-              </CardHeader>
 
-              <CardContent className="space-y-4">
-                {/* Add keyword */}
-                <div className="space-y-1.5">
-                  <div className="flex gap-2">
-                    <Input
-                      value={newKeyword}
-                      onChange={e => {
-                        setNewKeyword(e.target.value)
-                        if (keywordError) setKeywordError(null)
-                      }}
-                      onKeyDown={handleKeywordKeyDown}
-                      placeholder="e.g. need a web developer"
-                      maxLength={101}
-                      className="h-9 border-slate-600 bg-slate-900 text-white placeholder:text-slate-500 focus-visible:border-green-500 focus-visible:ring-green-500/20"
-                    />
-                    <Button
-                      onClick={handleAddKeyword}
-                      disabled={addingKeyword}
-                      size="default"
-                      className="shrink-0 border-0 bg-green-500 text-white hover:bg-green-600 disabled:opacity-60"
-                    >
-                      {addingKeyword ? 'Addingâ€¦' : 'Add'}
-                    </Button>
-                  </div>
-                  {keywordError && (
-                    <p className="text-xs text-red-400">{keywordError}</p>
-                  )}
-                </div>
+          <textarea
+            ref={textareaRef}
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleGenerate() }}
+            placeholder="Example: I'm a React developer who builds SaaS dashboards and landing pages. I specialize in TypeScript and Next.js."
+            rows={3}
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'rgba(2,8,23,.6)', border: '1px solid #1e3a5f',
+              borderRadius: '.625rem', padding: '.875rem 1rem',
+              color: '#e2e8f0', fontSize: '.9rem', lineHeight: 1.6,
+              resize: 'vertical', outline: 'none',
+              fontFamily: 'inherit',
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '.75rem' }}>
+            <span style={{ fontSize: '.75rem', color: '#334155' }}>Ctrl+Enter to generate</span>
+            <button
+              onClick={handleGenerate}
+              disabled={generating || !description.trim()}
+              style={{
+                background: generating ? '#1e3a5f' : 'linear-gradient(135deg,#22c55e,#16a34a)',
+                color: generating ? '#475569' : '#020817',
+                border: 'none', borderRadius: '.5rem',
+                padding: '.625rem 1.25rem', fontWeight: 700, fontSize: '.875rem',
+                cursor: generating || !description.trim() ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '.5rem',
+                transition: 'all .2s',
+              }}
+            >
+              {generating ? (
+                <>
+                  <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', fontSize: '1rem' }}>⟳</span>
+                  Generating...
+                </>
+              ) : '✨ Generate search terms'}
+            </button>
+          </div>
+        </div>
 
-                {/* Keyword list */}
-                {keywords.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-slate-500">
-                    No keywords yet. Add one above.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-slate-700/60">
-                    {keywords.map(kw => (
-                      <li
-                        key={kw.id}
-                        className="flex items-center gap-3 py-3"
-                      >
-                        <ToggleSwitch
-                          checked={kw.is_active}
-                          onChange={() => handleToggleKeyword(kw.id)}
-                          disabled={togglingId === kw.id}
-                          label={`Toggle keyword "${kw.keyword}"`}
-                        />
-                        <span
-                          className={[
-                            'flex-1 truncate text-sm',
-                            kw.is_active ? 'text-white' : 'text-slate-500 line-through',
-                          ].join(' ')}
-                        >
-                          {kw.keyword}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Delete keyword "${kw.keyword}"`}
-                          disabled={deletingId === kw.id}
-                          onClick={() => handleDeleteKeyword(kw.id, kw.keyword)}
-                          className="shrink-0 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
-                        >
-                          <Trash2Icon className="size-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* ----------------------------------------------------------------
-                MONITORED SUBREDDITS section
-            ---------------------------------------------------------------- */}
-            <Card className="bg-slate-800/50 border-slate-700 text-white">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-white">Monitored Subreddits</CardTitle>
-                    <CardDescription className="text-slate-400">
-                      Communities scanned for matching keywords.
-                    </CardDescription>
-                  </div>
-                  <span className="ml-4 shrink-0 rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">
-                    {activeSubreddits} active
-                  </span>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Add subreddit */}
-                <div className="space-y-1.5">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-400">
-                        r/
-                      </span>
-                      <Input
-                        value={newSubreddit}
-                        onChange={e => {
-                          setNewSubreddit(e.target.value)
-                          if (subredditError) setSubredditError(null)
-                        }}
-                        onKeyDown={handleSubredditKeyDown}
-                        placeholder="freelancers"
-                        maxLength={24}
-                        className="h-9 border-slate-600 bg-slate-900 pl-8 text-white placeholder:text-slate-500 focus-visible:border-green-500 focus-visible:ring-green-500/20"
-                      />
-                    </div>
-                    <Button
-                      onClick={handleAddSubreddit}
-                      disabled={addingSubreddit}
-                      size="default"
-                      className="shrink-0 border-0 bg-green-500 text-white hover:bg-green-600 disabled:opacity-60"
-                    >
-                      {addingSubreddit ? 'Addingâ€¦' : 'Add'}
-                    </Button>
-                  </div>
-                  {subredditError && (
-                    <p className="text-xs text-red-400">{subredditError}</p>
-                  )}
-                  <p className="text-xs text-slate-500">
-                    Letters, numbers, and underscores only &mdash; max 21 characters.
-                  </p>
-                </div>
-
-                {/* Subreddit list */}
-                {subreddits.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-slate-500">
-                    No subreddits yet. Add one above.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-slate-700/60">
-                    {subreddits.map(sr => (
-                      <li
-                        key={sr.id}
-                        className="flex items-center gap-3 py-3"
-                      >
-                        <ToggleSwitch
-                          checked={sr.is_active}
-                          onChange={() => handleToggleSubreddit(sr.id, sr.is_active)}
-                          disabled={togglingSubId === sr.id}
-                          label={`Toggle subreddit r/${sr.subreddit_name}`}
-                        />
-                        <span
-                          className={[
-                            'flex-1 truncate text-sm',
-                            sr.is_active ? 'text-white' : 'text-slate-500 line-through',
-                          ].join(' ')}
-                        >
-                          r/{sr.subreddit_name}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`Remove r/${sr.subreddit_name}`}
-                          disabled={deletingSubId === sr.id}
-                          onClick={() => handleDeleteSubreddit(sr.id, sr.subreddit_name)}
-                          className="shrink-0 rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
-                        >
-                          <Trash2Icon className="size-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </>
+        {/* Suggested keywords */}
+        {suggested.length > 0 && (
+          <div style={{ background: 'rgba(15,22,41,.8)', border: '1px solid rgba(34,197,94,.2)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem', marginBottom: '1rem' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg,#22c55e,#0ea5e9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>🤖</div>
+              <p style={{ margin: 0, color: '#4ade80', fontSize: '.9rem', fontWeight: 600 }}>
+                Found {suggested.length} search terms for you. Remove any you don&apos;t want, then save.
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '.5rem', marginBottom: '1rem' }}>
+              {suggested.map(kw => (
+                <span key={kw} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '.375rem',
+                  background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.25)',
+                  borderRadius: '9999px', padding: '.3rem .75rem',
+                  fontSize: '.825rem', color: '#4ade80', fontWeight: 500,
+                }}>
+                  {kw}
+                  <button onClick={() => removeSuggested(kw)} style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', fontSize: '.875rem', padding: 0, lineHeight: 1, opacity: .7 }}>×</button>
+                </span>
+              ))}
+            </div>
+            <button
+              onClick={saveKeywords}
+              disabled={saving || suggested.length === 0}
+              style={{
+                background: 'linear-gradient(135deg,#22c55e,#16a34a)',
+                color: '#020817', border: 'none', borderRadius: '.5rem',
+                padding: '.75rem 1.5rem', fontWeight: 700, fontSize: '.9rem',
+                cursor: saving ? 'not-allowed' : 'pointer', width: '100%',
+              }}
+            >
+              {saving ? 'Saving...' : `✓ Save ${suggested.length} search terms`}
+            </button>
+          </div>
         )}
+
+        {/* Active keywords */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#e2e8f0' }}>
+              Active search terms
+              {keywords.length > 0 && <span style={{ marginLeft: '.5rem', fontSize: '.8rem', color: '#334155', fontWeight: 400 }}>({keywords.filter(k => k.is_active).length} active)</span>}
+            </h2>
+          </div>
+
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+              {[1,2,3].map(i => <div key={i} style={{ height: 52, borderRadius: '.75rem', background: 'rgba(15,22,41,.5)', animation: 'pulse 2s infinite' }} />)}
+            </div>
+          ) : keywords.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem', background: 'rgba(15,22,41,.4)', border: '1px solid #1e3a5f', borderRadius: '1rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '.75rem' }}>🎯</div>
+              <p style={{ color: '#475569', fontSize: '.9rem', margin: 0 }}>No search terms yet — describe your service above to get started.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
+              {keywords.map(kw => (
+                <div key={kw.id} style={{
+                  display: 'flex', alignItems: 'center', gap: '.75rem',
+                  background: 'rgba(15,22,41,.6)', border: `1px solid ${kw.is_active ? '#1e3a5f' : '#0f1e38'}`,
+                  borderRadius: '.75rem', padding: '.875rem 1rem',
+                  opacity: kw.is_active ? 1 : .5,
+                }}>
+                  <button
+                    onClick={() => toggleKeyword(kw.id, kw.is_active)}
+                    style={{
+                      width: 36, height: 20, borderRadius: '9999px', flexShrink: 0,
+                      background: kw.is_active ? '#22c55e' : '#1e3a5f',
+                      border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .2s',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute', top: 2, left: kw.is_active ? 18 : 2,
+                      width: 16, height: 16, borderRadius: '50%', background: 'white',
+                      transition: 'left .2s',
+                    }} />
+                  </button>
+                  <span style={{ flex: 1, fontSize: '.9rem', color: kw.is_active ? '#e2e8f0' : '#475569' }}>{kw.keyword}</span>
+                  <button
+                    onClick={() => deleteKeyword(kw.id)}
+                    style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: '.25rem', fontSize: '1rem', lineHeight: 1, borderRadius: '.375rem', transition: 'color .15s' }}
+                    onMouseOver={e => (e.currentTarget.style.color = '#ef4444')}
+                    onMouseOut={e => (e.currentTarget.style.color = '#334155')}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <style>{`
+          @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+          @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+          textarea:focus { border-color: rgba(34,197,94,.4) !important; box-shadow: 0 0 0 3px rgba(34,197,94,.08); }
+        `}</style>
       </div>
-    </div>
     </AppShell>
   )
 }
