@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { rateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
@@ -8,82 +9,112 @@ export async function POST(request: NextRequest) {
     baseURL: 'https://openrouter.ai/api/v1',
     apiKey: process.env.OPENROUTER_API_KEY || 'placeholder',
   })
-  // Rate limit: 30 per minute per IP
-  const ip =
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-    request.headers.get('x-real-ip') ??
-    'unknown'
 
-  const { success } = rateLimit(ip, 30)
-  if (!success) {
-    return NextResponse.json(
-      { error: 'Too many requests. Please try again later.' },
-      { status: 429 }
-    )
-  }
+  // Accept cron secret OR user session
+  const cronSecret = request.headers.get('x-cron-secret')
+  const isCron =
+    cronSecret != null &&
+    process.env.CRON_SECRET != null &&
+    cronSecret === process.env.CRON_SECRET
 
-  // Verify auth session
-  const supabase = await createClient()
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!isCron) {
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      request.headers.get('x-real-ip') ??
+      'unknown'
+    const { success } = rateLimit(ip, 30)
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      )
+    }
   }
 
   // Parse request body
-  let body: { leadId?: string }
+  let body: { leadId?: string; userId?: string }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
-  const { leadId } = body
+  const { leadId, userId: bodyUserId } = body
   if (!leadId || typeof leadId !== 'string') {
-    return NextResponse.json(
-      { error: 'leadId is required' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'leadId is required' }, { status: 400 })
   }
 
-  // Fetch lead from DB, verify it belongs to the user
-  const { data: lead, error: leadError } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('id', leadId)
-    .eq('user_id', user.id)
-    .single()
+  let lead: Record<string, unknown>
+  let profile: { service_description?: string | null; skills?: string[] | null; bio?: string | null }
+  let resolvedUserId: string
 
-  if (leadError || !lead) {
-    return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+  if (isCron) {
+    if (!bodyUserId || typeof bodyUserId !== 'string') {
+      return NextResponse.json({ error: 'userId required for cron requests' }, { status: 400 })
+    }
+    resolvedUserId = bodyUserId
+    const admin = createAdminClient()
+
+    const { data: leadData, error: leadError } = await admin
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .eq('user_id', resolvedUserId)
+      .single()
+    if (leadError || !leadData) {
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    }
+    lead = leadData
+
+    const { data: profileData, error: profileError } = await admin
+      .from('profiles')
+      .select('service_description, skills, bio')
+      .eq('id', resolvedUserId)
+      .single()
+    if (profileError || !profileData) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
+    }
+    profile = profileData
+  } else {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    resolvedUserId = user.id
+
+    const { data: leadData, error: leadError } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', leadId)
+      .eq('user_id', resolvedUserId)
+      .single()
+    if (leadError || !leadData) {
+      return NextResponse.json({ error: 'Lead not found' }, { status: 404 })
+    }
+    lead = leadData
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('service_description, skills, bio')
+      .eq('id', resolvedUserId)
+      .single()
+    if (profileError || !profileData) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
+    }
+    profile = profileData
   }
 
   // Only draft for leads with lead_score >= 6
-  if ((lead.lead_score ?? 0) < 6) {
+  if (((lead.lead_score as number) ?? 0) < 6) {
     return NextResponse.json(
       { error: 'Lead score too low to draft a message (minimum score: 6)' },
       { status: 422 }
     )
   }
 
-  // Fetch user's profile
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('service_description, skills, bio')
-    .eq('id', user.id)
-    .single()
-
-  if (profileError || !profile) {
-    return NextResponse.json(
-      { error: 'User profile not found' },
-      { status: 404 }
-    )
-  }
-
   const { service_description, skills, bio } = profile
+  const platform = (lead.platform as string) === 'hackernews' ? 'Hacker News' : 'Reddit'
 
   // Call AI via OpenRouter
   let draftedMessage: string
@@ -94,9 +125,9 @@ export async function POST(request: NextRequest) {
       messages: [
         {
           role: 'user',
-          content: `Write a short conversational Reddit DM reply to this post.
-Post title: ${lead.post_title}
-Post body: ${lead.post_body}
+          content: `Write a short outreach reply to this ${platform} post from someone looking to hire.
+Post title: ${lead.post_title as string}
+Post body: ${lead.post_body as string}
 About me: ${service_description ?? ''}. Skills: ${(skills ?? []).join(', ')}. Bio: ${bio ?? ''}
 
 Requirements:
@@ -123,22 +154,20 @@ Requirements:
     )
   }
 
-  // Generate subject line: "Re: {title truncated to 50 chars}"
-  const truncatedTitle =
-    lead.post_title.length > 50
-      ? lead.post_title.slice(0, 50)
-      : lead.post_title
+  const postTitle = lead.post_title as string
+  const truncatedTitle = postTitle.length > 50 ? postTitle.slice(0, 50) : postTitle
   const draftedEmailSubject = `Re: ${truncatedTitle}`
 
   // Update lead with drafted_message and drafted_email_subject
-  const { error: updateError } = await supabase
+  const db = isCron ? createAdminClient() : await createClient()
+  const { error: updateError } = await db
     .from('leads')
     .update({
       drafted_message: draftedMessage,
       drafted_email_subject: draftedEmailSubject,
     })
     .eq('id', leadId)
-    .eq('user_id', user.id)
+    .eq('user_id', resolvedUserId)
 
   if (updateError) {
     console.error('Failed to update lead:', updateError)

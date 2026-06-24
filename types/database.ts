@@ -119,7 +119,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          platform: 'reddit'
+          platform: 'reddit' | 'hackernews'
           post_id: string
           post_title: string
           post_body: string | null
@@ -140,7 +140,7 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
-          platform?: 'reddit'
+          platform?: 'reddit' | 'hackernews'
           post_id: string
           post_title: string
           post_body?: string | null
@@ -161,7 +161,7 @@ export interface Database {
         Update: {
           id?: string
           user_id?: string
-          platform?: 'reddit'
+          platform?: 'reddit' | 'hackernews'
           post_id?: string
           post_title?: string
           post_body?: string | null

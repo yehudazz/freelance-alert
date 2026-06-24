@@ -64,8 +64,8 @@ function buildEmailHtml(lead: Lead, appUrl: string): string {
             <!-- Details table -->
             <table cellpadding="0" cellspacing="0" style="width:100%;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;padding:12px 0;margin-bottom:24px;">
               <tr>
-                <td style="padding:4px 0;color:#6b7280;font-size:14px;width:100px;">Subreddit</td>
-                <td style="padding:4px 0;font-size:14px;">r/${(lead.subreddit ?? 'unknown').replace(/</g, '&lt;')}</td>
+                <td style="padding:4px 0;color:#6b7280;font-size:14px;width:100px;">Source</td>
+                <td style="padding:4px 0;font-size:14px;">${lead.platform === 'hackernews' ? 'Hacker News' : lead.subreddit ? `Reddit · r/${lead.subreddit.replace(/</g, '&lt;')}` : (lead.platform ?? 'Unknown')}</td>
               </tr>
               <tr>
                 <td style="padding:4px 0;color:#6b7280;font-size:14px;">Urgency</td>

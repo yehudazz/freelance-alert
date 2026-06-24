@@ -56,7 +56,12 @@ function urgencyBadgeClass(level: Lead['urgency_level']): string {
 // Page
 // ---------------------------------------------------------------------------
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ success?: string }>
+}) {
+  const params = await searchParams
   const supabase = await createClient()
 
   // Auth check
@@ -126,6 +131,17 @@ export default async function DashboardPage() {
   return (
     <AppShell>
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
+        {/* Success banner */}
+        {params.success === 'true' && (
+          <div className="flex items-center gap-3 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4">
+            <span className="text-green-400 text-xl">✓</span>
+            <div>
+              <p className="font-semibold text-green-300 text-sm">You&apos;re all set!</p>
+              <p className="text-green-200/70 text-sm mt-0.5">Your plan has been activated. New leads will start flowing in shortly.</p>
+            </div>
+          </div>
+        )}
+
         {/* Upgrade banner */}
         {isFreeTierFull && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-5 py-4">
@@ -197,9 +213,9 @@ export default async function DashboardPage() {
               </div>
               <p className="text-slate-300 font-medium">No leads yet</p>
               <p className="text-slate-500 text-sm mt-1 max-w-sm mx-auto">
-                We&apos;re monitoring Reddit right now. Check back soon or add more keywords.
+                We&apos;re monitoring Hacker News right now. Check back soon or add more keywords.
               </p>
-              <Link href="/settings/keywords" className="mt-6 inline-block">
+              <Link href="/keywords" className="mt-6 inline-block">
                 <Button
                   variant="outline"
                   className="border-slate-600 text-slate-300 hover:text-white hover:border-slate-400"
